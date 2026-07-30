@@ -1,5 +1,15 @@
 # Armada LSFG
 
+<p align="center">
+  <img src="assets/screenshots/02-main.png" width="90%" alt="Armada LSFG - Main interface">
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/01-main.png" width="32%" alt="Armada LSFG in Decky">
+  <img src="assets/screenshots/03-profile.png" width="32%" alt="Armada LSFG profile settings">
+  <img src="assets/screenshots/01-games.png" width="32%" alt="Armada LSFG add game">
+</p>
+
 🇫🇷 **Projet français — documentation disponible en français et en anglais.**
 
 🇬🇧 **French project — documentation available in French and English.**
