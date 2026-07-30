@@ -1,11 +1,13 @@
 {
-  "name": "Example Plugin",
-  "author": "John Doe",
-  "flags": ["debug", "_root"],
+  "name": "Armada LSFG",
+  "author": "BakaPute",
   "api_version": 1,
   "publish": {
-    "tags": ["template", "root"],
-    "description": "Decky example plugin.",
-    "image": "https://opengraph.githubassets.com/1/SteamDeckHomebrew/PluginLoader"
+    "tags": [
+      "armada",
+      "lsfg",
+      "frame-generation"
+    ],
+    "description": "Manage LSFG-VK profiles on ArmadaOS."
   }
 }

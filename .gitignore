@@ -1,57 +1,30 @@
-lib-cov
-*.seed
-*.log
-*.csv
-*.dat
-*.out
-*.pid
-*.gz
-*.swp
+# Node
+node_modules/
+.pnpm-store/
 
-pids
-logs
-results
-tmp
+# Build
+dist/
+out/
 
-# Coverage reports
-coverage
+# Python
+__pycache__/
+*.py[cod]
 
-# API keys and secrets
+# Environment
 .env
+.env.*
 
-# Dependency directory
-node_modules
-bower_components
-.pnpm-store
+# Temporary files
+*.log
+*.tmp
+*.swp
+tmp/
 
 # Editors
-.idea
+.vscode/
+.idea/
 *.iml
 
-# OS metadata
+# OS
 .DS_Store
 Thumbs.db
-
-# Ignore built ts files
-dist/
-
-__pycache__/
-
-/.yalc
-yalc.lock
-
-.vscode/settings.json
-
-# Ignore output folder
-
-backend/out
-
-# Make sure to ignore any instance of the loader's decky_plugin.py
-decky_plugin.py
-
-# Ignore decky CLI for building plugins
-out
-out/*
-cli/
-cli/*
-cli/decky
