@@ -67,6 +67,48 @@ LSFG-VK utilise notamment le fichier `Lossless.dll` provenant de votre propre in
 
 ### 3. Installer LSFG-VK pour ArmadaOS / aarch64
 
+Le plus simple est de réaliser cette étape **en SSH depuis un PC**. Cela permet de copier/coller les commandes plus facilement et de suivre l'installation depuis un vrai terminal.
+
+#### Activer SSH dans ArmadaOS
+
+1. Ouvrez le **Quick Access Menu**.
+2. Ouvrez **Decky**, puis **Armada Control**.
+3. Activez **SSH** dans Armada Control.
+4. Relevez l'adresse IP de votre appareil sur votre réseau local.
+5. Depuis un PC connecté au même réseau, ouvrez un terminal et connectez-vous :
+
+```bash
+ssh armada@ADRESSE_IP
+```
+
+Exemple :
+
+```bash
+ssh armada@192.168.1.50
+```
+
+Lors de la première connexion, acceptez l'empreinte SSH si elle correspond bien à votre appareil.
+
+Identifiants par défaut de l'image ArmadaOS :
+
+```text
+Utilisateur : armada
+Mot de passe : armada
+```
+
+> [!IMPORTANT]
+> ArmadaOS est livré avec ce mot de passe connu et SSH est désactivé par défaut. Une fois SSH activé, toute personne ayant accès à votre réseau local peut tenter de se connecter tant que le mot de passe par défaut n'a pas été changé.
+>
+> Il est fortement recommandé de modifier immédiatement le mot de passe avec :
+>
+> ```bash
+> passwd
+> ```
+>
+> Utilisez ensuite ce nouveau mot de passe pour les connexions SSH et les demandes `sudo`.
+
+Une fois connecté en SSH, installez LSFG-VK.
+
 Armada LSFG est prévu pour fonctionner avec le build ARM64 suivant :
 
 **[Zensenshi/lsfg-vk-odin2-armada](https://github.com/Zensenshi/lsfg-vk-odin2-armada)**
@@ -140,6 +182,48 @@ Purchase and install **[Lossless Scaling on Steam](https://store.steampowered.co
 LSFG-VK uses files from your own Lossless Scaling installation, including `Lossless.dll`.
 
 ### 3. Install LSFG-VK for ArmadaOS / aarch64
+
+The easiest way to complete this step is **over SSH from a PC**. This makes it much easier to copy/paste commands and follow the installation from a proper terminal.
+
+#### Enable SSH in ArmadaOS
+
+1. Open the **Quick Access Menu**.
+2. Open **Decky**, then **Armada Control**.
+3. Enable **SSH** in Armada Control.
+4. Note the IP address of your device on your local network.
+5. From a PC connected to the same network, open a terminal and connect:
+
+```bash
+ssh armada@DEVICE_IP
+```
+
+Example:
+
+```bash
+ssh armada@192.168.1.50
+```
+
+On the first connection, accept the SSH host fingerprint if it matches your device.
+
+Default ArmadaOS image credentials:
+
+```text
+Username: armada
+Password: armada
+```
+
+> [!IMPORTANT]
+> ArmadaOS ships with this known default password and SSH is disabled by default. Once SSH is enabled, anyone with access to your local network can attempt to log in until the default password has been changed.
+>
+> It is strongly recommended to change the password immediately with:
+>
+> ```bash
+> passwd
+> ```
+>
+> Then use the new password for SSH connections and `sudo` prompts.
+
+Once connected over SSH, install LSFG-VK.
 
 Armada LSFG is intended to work with this ARM64 build:
 
