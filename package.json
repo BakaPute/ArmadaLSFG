@@ -1,6 +1,6 @@
 {
   "name": "armada-lsfg",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Decky plugin for managing LSFG-VK profiles on ArmadaOS.",
   "type": "module",
   "scripts": {

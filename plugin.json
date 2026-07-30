@@ -9,5 +9,6 @@
       "frame-generation"
     ],
     "description": "Unofficial Decky plugin for managing LSFG-VK profiles on ArmadaOS."
-  }
+  },
+  "flags": []
 }

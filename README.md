@@ -81,4 +81,4 @@ https://github.com/BakaPute
 
 ## Version
 
-**v0.1.0**
+**v0.1.1**
