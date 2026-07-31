@@ -1,5 +1,7 @@
 from pathlib import Path
+import asyncio
 import json
+import os
 import struct
 
 import decky
@@ -27,6 +29,9 @@ class Plugin:
 
     def _settings_path(self) -> Path:
         return self._settings_dir() / "settings.json"
+
+    def _refresh_cache_path(self) -> Path:
+        return self._settings_dir() / "refresh-cache.json"
 
     # ---------------------------------------------------------
     # Lossless.dll
@@ -311,6 +316,71 @@ class Plugin:
         temp.replace(path)
 
     # ---------------------------------------------------------
+    # Cache d'actualisation / préférences
+    # ---------------------------------------------------------
+
+    def _load_refresh_cache(self):
+        path = self._refresh_cache_path()
+
+        if not path.is_file():
+            return {}
+
+        try:
+            data = json.loads(
+                path.read_text(encoding="utf-8")
+            )
+
+            return (
+                data
+                if isinstance(data, dict)
+                else {}
+            )
+
+        except Exception as exc:
+            decky.logger.error(
+                f"Unable to read refresh cache: {exc}"
+            )
+            return {}
+
+    def _save_refresh_cache(self, cache):
+        directory = self._settings_dir()
+
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        path = self._refresh_cache_path()
+        temp = directory / "refresh-cache.json.tmp"
+
+        temp.write_text(
+            json.dumps(
+                cache,
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        temp.replace(path)
+
+    def _update_cached_status(self, status):
+        cache = self._load_refresh_cache()
+        cache["status"] = status
+        self._save_refresh_cache(cache)
+
+    def _detection_complete(self, status):
+        return (
+            bool(status.get("layer_exists"))
+            and bool(status.get("dll_exists"))
+            and bool(status.get("config_exists"))
+            and status.get("architecture")
+            not in (None, "", "inconnue")
+            and not status.get("config_parse_error")
+        )
+
+    # ---------------------------------------------------------
     # Première migration
     #
     # Si settings.json n'existe pas encore, les profils LSFG
@@ -322,6 +392,19 @@ class Plugin:
         settings = self._load_settings()
 
         if settings is not None:
+            changed = False
+
+            if "auto_refresh" not in settings:
+                settings["auto_refresh"] = False
+                changed = True
+
+            if "initial_refresh_complete" not in settings:
+                settings["initial_refresh_complete"] = False
+                changed = True
+
+            if changed:
+                self._save_settings(settings)
+
             return settings
 
         text = self._read_config_text()
@@ -365,6 +448,8 @@ class Plugin:
         settings = {
             "version": self.SETTINGS_VERSION,
             "profiles": managed,
+            "auto_refresh": False,
+            "initial_refresh_complete": False,
         }
 
         self._save_settings(settings)
@@ -513,14 +598,15 @@ class Plugin:
 
         return lower in ignored_exact
 
-    def _scan_executables(
+    def _scan_game_executables(
         self,
         game_dir: Path,
     ):
         candidates = set()
+        executables = []
 
         if not game_dir.is_dir():
-            return []
+            return [], []
 
         ignored_path_tokens = (
             "redist",
@@ -546,119 +632,191 @@ class Plugin:
             "encoder",
         )
 
-        for path in game_dir.rglob("*"):
-            if not path.is_file():
-                continue
-
-            if path.suffix.lower() != ".exe":
-                continue
+        # Un seul parcours du jeu au lieu de deux rglob complets.
+        # os.walk évite aussi les stat() sur tous les fichiers
+        # qui ne sont pas des .exe.
+        for root, _, filenames in os.walk(
+            game_dir,
+            followlinks=False,
+        ):
+            root_path = Path(root)
 
             try:
-                relative = path.relative_to(
+                relative_root = root_path.relative_to(
                     game_dir
                 )
             except ValueError:
-                continue
-
-            # On évite les dossiers extrêmement profonds.
-            if len(relative.parts) > 5:
                 continue
 
             parts_lower = [
                 part.lower()
-                for part in relative.parts[:-1]
+                for part in relative_root.parts
             ]
 
-            if any(
-                token in part
-                for part in parts_lower
-                for token in ignored_path_tokens
-            ):
-                continue
+            for filename in filenames:
+                lower = filename.lower()
 
-            filename = path.name
-            lower = filename.lower()
+                if not lower.endswith(".exe"):
+                    continue
 
-            if any(
-                token in lower
-                for token in ignored_filename_tokens
-            ):
-                continue
-
-            if "_trial" in lower:
-                continue
-
-            candidates.add(filename)
-
-        return sorted(
-            candidates,
-            key=str.lower,
-        )
-
-    def _scan_all_executables(
-        self,
-        game_dir: Path,
-    ):
-        executables = []
-
-        if not game_dir.is_dir():
-            return executables
-
-        for path in game_dir.rglob("*"):
-            if not path.is_file():
-                continue
-
-            if path.suffix.lower() != ".exe":
-                continue
-
-            try:
-                relative = path.relative_to(
-                    game_dir
+                relative = (
+                    relative_root
+                    / filename
                 )
-            except ValueError:
-                continue
 
-            executables.append(
-                {
-                    "path": relative.as_posix(),
-                    "name": path.name,
-                }
-            )
+                executables.append(
+                    {
+                        "path": relative.as_posix(),
+                        "name": filename,
+                    }
+                )
+
+                # Le fichier reste disponible dans
+                # all_executables, mais pas forcément
+                # comme candidat automatique.
+                if len(relative.parts) > 5:
+                    continue
+
+                if any(
+                    token in part
+                    for part in parts_lower
+                    for token in ignored_path_tokens
+                ):
+                    continue
+
+                if any(
+                    token in lower
+                    for token in ignored_filename_tokens
+                ):
+                    continue
+
+                if "_trial" in lower:
+                    continue
+
+                candidates.add(filename)
 
         executables.sort(
             key=lambda item:
                 item["path"].lower()
         )
 
+        return (
+            sorted(
+                candidates,
+                key=str.lower,
+            ),
+            executables,
+        )
+
+    def _scan_executables(
+        self,
+        game_dir: Path,
+    ):
+        candidates, _ = (
+            self._scan_game_executables(
+                game_dir
+            )
+        )
+        return candidates
+
+    def _scan_all_executables(
+        self,
+        game_dir: Path,
+    ):
+        _, executables = (
+            self._scan_game_executables(
+                game_dir
+            )
+        )
         return executables
 
-    def _installed_steam_games(self):
+    def _installed_steam_games(
+        self,
+        progress_callback=None,
+    ):
         settings = self._bootstrap_settings()
         managed_profiles = settings.get(
             "profiles",
             {},
         )
 
-        games_by_appid = {}
+        managed_keys = {
+            str(key).lower()
+            for key in managed_profiles
+        }
+
+        managed_appids = {
+            str(profile.get("appid"))
+            for profile in managed_profiles.values()
+            if profile.get("appid") is not None
+        }
+
+        library_manifests = []
 
         for steamapps in self._steamapps_paths():
+            library_manifests.append(
+                (
+                    steamapps,
+                    sorted(
+                        steamapps.glob(
+                            "appmanifest_*.acf"
+                        )
+                    ),
+                )
+            )
+
+        total = sum(
+            len(manifests)
+            for _, manifests
+            in library_manifests
+        )
+
+        processed = 0
+        games_by_appid = {}
+
+        if progress_callback is not None:
+            progress_callback(
+                processed,
+                total,
+                None,
+            )
+
+        for steamapps, manifests in (
+            library_manifests
+        ):
             common = steamapps / "common"
 
-            for manifest in sorted(
-                steamapps.glob(
-                    "appmanifest_*.acf"
-                )
-            ):
+            for manifest in manifests:
                 data = self._read_manifest(
                     manifest
                 )
 
                 if not data:
+                    processed += 1
+
+                    if progress_callback is not None:
+                        progress_callback(
+                            processed,
+                            total,
+                            None,
+                        )
+
                     continue
 
+                game_name = data["name"]
+
                 if self._ignore_steam_entry(
-                    data["name"]
+                    game_name
                 ):
+                    processed += 1
+
+                    if progress_callback is not None:
+                        progress_callback(
+                            processed,
+                            total,
+                            game_name,
+                        )
+
                     continue
 
                 game_dir = (
@@ -666,54 +824,38 @@ class Plugin:
                     / data["installdir"]
                 )
 
-                candidates = (
-                    self._scan_executables(
-                        game_dir
-                    )
+                (
+                    candidates,
+                    all_executables,
+                ) = self._scan_game_executables(
+                    game_dir
                 )
 
-                all_executables = (
-                    self._scan_all_executables(
-                        game_dir
-                    )
-                )
+                processed += 1
 
-                # Le jeu doit avoir au moins un .exe,
-                # même si aucun n'a passé le filtre
-                # automatique.
+                if progress_callback is not None:
+                    progress_callback(
+                        processed,
+                        total,
+                        game_name,
+                    )
+
                 if not all_executables:
                     continue
 
                 appid = data["appid"]
 
-                # Steam peut temporairement laisser un manifest
-                # en double après un déplacement entre bibliothèques.
-                # On garde la première installation valide trouvée.
                 if appid in games_by_appid:
                     continue
 
-                managed = False
-
-                for key, profile in (
-                    managed_profiles.items()
-                ):
-                    profile_appid = str(
-                        profile.get(
-                            "appid",
-                            "",
-                        )
-                    )
-
-                    if profile_appid == appid:
-                        managed = True
-                        break
-
-                    if key in {
+                managed = (
+                    appid in managed_appids
+                    or any(
                         exe.lower()
+                        in managed_keys
                         for exe in candidates
-                    }:
-                        managed = True
-                        break
+                    )
+                )
 
                 recommended = (
                     candidates[0]
@@ -723,7 +865,7 @@ class Plugin:
 
                 games_by_appid[appid] = {
                     "appid": appid,
-                    "name": data["name"],
+                    "name": game_name,
                     "installdir": (
                         data["installdir"]
                     ),
@@ -750,8 +892,280 @@ class Plugin:
 
         return games
 
-    async def get_steam_games(self):
+    def _apply_managed_flags(
+        self,
+        games,
+    ):
+        settings = self._bootstrap_settings()
+        profiles = settings.get(
+            "profiles",
+            {},
+        )
+
+        managed_keys = {
+            str(key).lower()
+            for key in profiles
+        }
+
+        managed_appids = {
+            str(profile.get("appid"))
+            for profile in profiles.values()
+            if profile.get("appid") is not None
+        }
+
+        result = []
+
+        for game in games:
+            item = dict(game)
+
+            item["managed"] = (
+                str(item.get("appid", ""))
+                in managed_appids
+                or any(
+                    str(exe).lower()
+                    in managed_keys
+                    for exe in item.get(
+                        "executable_candidates",
+                        [],
+                    )
+                )
+            )
+
+            result.append(item)
+
+        return result
+
+    def _known_steam_games(self):
+        cache = self._load_refresh_cache()
+        games = cache.get("steam_games")
+
+        if isinstance(games, list):
+            return self._apply_managed_flags(
+                games
+            )
+
         return self._installed_steam_games()
+
+    async def get_steam_games(self):
+        return await asyncio.to_thread(
+            self._known_steam_games
+        )
+
+    def _set_refresh_progress(
+        self,
+        percent,
+        message,
+        active=True,
+    ):
+        self._refresh_progress = {
+            "active": bool(active),
+            "percent": max(
+                0,
+                min(
+                    100,
+                    int(percent),
+                ),
+            ),
+            "message": str(message),
+        }
+
+    async def get_refresh_progress(self):
+        return dict(
+            getattr(
+                self,
+                "_refresh_progress",
+                {
+                    "active": False,
+                    "percent": 0,
+                    "message": "",
+                },
+            )
+        )
+
+    async def get_dashboard_state(self):
+        settings = self._bootstrap_settings()
+        cache = self._load_refresh_cache()
+
+        cached_games = cache.get(
+            "steam_games",
+            [],
+        )
+
+        if not isinstance(
+            cached_games,
+            list,
+        ):
+            cached_games = []
+
+        return {
+            "status": cache.get("status"),
+            "steam_games": (
+                self._apply_managed_flags(
+                    cached_games
+                )
+            ),
+            "auto_refresh": bool(
+                settings.get(
+                    "auto_refresh",
+                    False,
+                )
+            ),
+            "initial_refresh_complete": bool(
+                settings.get(
+                    "initial_refresh_complete",
+                    False,
+                )
+            ),
+        }
+
+    async def set_auto_refresh(
+        self,
+        enabled: bool,
+    ):
+        settings = self._bootstrap_settings()
+        settings["auto_refresh"] = bool(
+            enabled
+        )
+        self._save_settings(settings)
+
+        return bool(enabled)
+
+    async def refresh_all(self):
+        if not hasattr(
+            self,
+            "_refresh_lock",
+        ):
+            self._refresh_lock = (
+                asyncio.Lock()
+            )
+
+        async with self._refresh_lock:
+            self._set_refresh_progress(
+                2,
+                "Démarrage de l'actualisation...",
+            )
+
+            try:
+                self._set_refresh_progress(
+                    8,
+                    "Détection LSFG-VK...",
+                )
+
+                status = await self.get_status()
+
+                self._set_refresh_progress(
+                    15,
+                    "Analyse des bibliothèques Steam...",
+                )
+
+                def progress(
+                    current,
+                    total,
+                    game_name,
+                ):
+                    if total <= 0:
+                        percent = 95
+                    else:
+                        percent = (
+                            15
+                            + int(
+                                80
+                                * current
+                                / total
+                            )
+                        )
+
+                    if game_name:
+                        message = (
+                            f"Analyse Steam : "
+                            f"{game_name} "
+                            f"({current}/{total})"
+                        )
+                    else:
+                        message = (
+                            f"Analyse Steam "
+                            f"({current}/{total})"
+                        )
+
+                    self._set_refresh_progress(
+                        percent,
+                        message,
+                    )
+
+                games = await asyncio.to_thread(
+                    self._installed_steam_games,
+                    progress,
+                )
+
+                self._set_refresh_progress(
+                    97,
+                    "Enregistrement du cache...",
+                )
+
+                self._save_refresh_cache(
+                    {
+                        "status": status,
+                        "steam_games": games,
+                    }
+                )
+
+                settings = (
+                    self._bootstrap_settings()
+                )
+
+                if (
+                    not settings.get(
+                        "initial_refresh_complete",
+                        False,
+                    )
+                    and self._detection_complete(
+                        status
+                    )
+                ):
+                    settings[
+                        "initial_refresh_complete"
+                    ] = True
+
+                    self._save_settings(
+                        settings
+                    )
+
+                result = {
+                    "status": status,
+                    "steam_games": (
+                        self._apply_managed_flags(
+                            games
+                        )
+                    ),
+                    "auto_refresh": bool(
+                        settings.get(
+                            "auto_refresh",
+                            False,
+                        )
+                    ),
+                    "initial_refresh_complete": bool(
+                        settings.get(
+                            "initial_refresh_complete",
+                            False,
+                        )
+                    ),
+                }
+
+                self._set_refresh_progress(
+                    100,
+                    "Actualisation terminée.",
+                    active=False,
+                )
+
+                return result
+
+            except Exception:
+                self._set_refresh_progress(
+                    0,
+                    "Échec de l'actualisation.",
+                    active=False,
+                )
+                raise
 
     async def add_steam_game(
         self,
@@ -764,7 +1178,7 @@ class Plugin:
         game = None
 
         for candidate_game in (
-            self._installed_steam_games()
+            self._known_steam_games()
         ):
             if (
                 candidate_game["appid"]
@@ -934,7 +1348,7 @@ class Plugin:
             key=lambda profile: profile["name"].lower()
         )
 
-        return {
+        result = {
             "architecture": self._get_layer_architecture(),
 
             "config_exists": config_path.is_file(),
@@ -954,6 +1368,12 @@ class Plugin:
             "profile_count": len(active_keys),
             "managed_profiles": managed_profiles,
         }
+
+        self._update_cached_status(
+            result
+        )
+
+        return result
 
     # ---------------------------------------------------------
     # ON / OFF
@@ -1308,7 +1728,7 @@ class Plugin:
         )
 
         installed_games = (
-            self._installed_steam_games()
+            self._known_steam_games()
         )
 
         steam_game = None
@@ -1636,6 +2056,13 @@ class Plugin:
     # ---------------------------------------------------------
 
     async def _main(self):
+        self._refresh_lock = asyncio.Lock()
+        self._refresh_progress = {
+            "active": False,
+            "percent": 0,
+            "message": "",
+        }
+
         self._bootstrap_settings()
 
         decky.logger.info(

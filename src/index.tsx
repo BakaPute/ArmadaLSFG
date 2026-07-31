@@ -75,15 +75,48 @@ type SteamGame = {
 };
 
 
-const getStatus =
-  callable<[], LSFGStatus>(
-    "get_status",
-  );
+type DashboardState = {
+  status: LSFGStatus | null;
+  steam_games: SteamGame[];
+  auto_refresh: boolean;
+  initial_refresh_complete: boolean;
+};
+
+
+type RefreshProgress = {
+  active: boolean;
+  percent: number;
+  message: string;
+};
 
 
 const getSteamGames =
   callable<[], SteamGame[]>(
     "get_steam_games",
+  );
+
+
+const getDashboardState =
+  callable<[], DashboardState>(
+    "get_dashboard_state",
+  );
+
+
+const refreshAll =
+  callable<[], DashboardState>(
+    "refresh_all",
+  );
+
+
+const getRefreshProgress =
+  callable<[], RefreshProgress>(
+    "get_refresh_progress",
+  );
+
+
+const setAutoRefreshPreference =
+  callable<[enabled: boolean], boolean>(
+    "set_auto_refresh",
   );
 
 
@@ -221,6 +254,22 @@ function Content() {
     setLoading,
   ] = useState(false);
 
+
+  const [
+    autoRefresh,
+    setAutoRefresh,
+  ] = useState(false);
+
+
+  const [
+    refreshProgress,
+    setRefreshProgress,
+  ] = useState<RefreshProgress>({
+    active: false,
+    percent: 0,
+    message: "",
+  });
+
   const [
     busyKey,
     setBusyKey,
@@ -291,17 +340,51 @@ function Content() {
     setLoading(true);
     setError(null);
 
-    try {
-      const [
-        newStatus,
-        newSteamGames,
-      ] = await Promise.all([
-        getStatus(),
-        getSteamGames(),
-      ]);
+    setRefreshProgress({
+      active: true,
+      percent: 0,
+      message:
+        "Démarrage de l'actualisation...",
+    });
 
-      setStatus(newStatus);
-      setSteamGames(newSteamGames);
+    let progressTimer:
+      number | null = null;
+
+    try {
+      progressTimer =
+        window.setInterval(
+          () => {
+            void getRefreshProgress()
+              .then((progress) => {
+                setRefreshProgress(
+                  progress
+                );
+              })
+              .catch(() => {
+                // Le rafraîchissement principal
+                // reste prioritaire.
+              });
+          },
+          250,
+        );
+
+      const result =
+        await refreshAll();
+
+      setStatus(result.status);
+      setSteamGames(
+        result.steam_games
+      );
+      setAutoRefresh(
+        result.auto_refresh
+      );
+
+      setRefreshProgress({
+        active: false,
+        percent: 100,
+        message:
+          "Actualisation terminée.",
+      });
 
     } catch (err) {
       console.error(
@@ -311,7 +394,20 @@ function Content() {
 
       setError(String(err));
 
+      setRefreshProgress({
+        active: false,
+        percent: 0,
+        message:
+          "Échec de l'actualisation.",
+      });
+
     } finally {
+      if (progressTimer !== null) {
+        window.clearInterval(
+          progressTimer
+        );
+      }
+
       setLoading(false);
     }
   };
@@ -328,6 +424,34 @@ function Content() {
           "Steam game refresh failed:",
           err
         );
+      }
+    };
+
+
+  const changeAutoRefresh =
+    async (enabled: boolean) => {
+
+      const previous = autoRefresh;
+
+      setAutoRefresh(enabled);
+      setError(null);
+
+      try {
+        const saved =
+          await setAutoRefreshPreference(
+            enabled
+          );
+
+        setAutoRefresh(saved);
+
+      } catch (err) {
+        console.error(
+          "Auto refresh preference failed:",
+          err
+        );
+
+        setAutoRefresh(previous);
+        setError(String(err));
       }
     };
 
@@ -697,7 +821,61 @@ function Content() {
 
 
   useEffect(() => {
-    refresh();
+    let cancelled = false;
+
+    const initialize =
+      async () => {
+        setError(null);
+
+        try {
+          const initial =
+            await getDashboardState();
+
+          if (cancelled) {
+            return;
+          }
+
+          setAutoRefresh(
+            initial.auto_refresh
+          );
+
+          if (initial.status) {
+            setStatus(
+              initial.status
+            );
+          }
+
+          setSteamGames(
+            initial.steam_games
+          );
+
+          const shouldRefresh =
+            initial.auto_refresh
+            || !initial
+              .initial_refresh_complete
+            || !initial.status;
+
+          if (shouldRefresh) {
+            await refresh();
+          }
+
+        } catch (err) {
+          console.error(
+            "Armada LSFG initialization failed:",
+            err
+          );
+
+          if (!cancelled) {
+            setError(String(err));
+          }
+        }
+      };
+
+    void initialize();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
 
@@ -761,6 +939,76 @@ function Content() {
               : "Actualiser"}
           </ButtonItem>
         </PanelSectionRow>
+
+
+        <PanelSectionRow>
+          <ToggleField
+            label="Actualisation automatique"
+            description={
+              autoRefresh
+                ? "Actualiser à chaque ouverture"
+                : "Manuelle après la première détection"
+            }
+            checked={autoRefresh}
+            disabled={loading}
+            onChange={
+              changeAutoRefresh
+            }
+          />
+        </PanelSectionRow>
+
+
+        {loading && (
+          <PanelSectionRow>
+            <div
+              style={{
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  marginBottom: "6px",
+                  fontSize: "13px",
+                }}
+              >
+                {refreshProgress.message}
+              </div>
+
+              <div
+                style={{
+                  width: "100%",
+                  height: "8px",
+                  borderRadius: "4px",
+                  overflow: "hidden",
+                  background:
+                    "rgba(255,255,255,0.15)",
+                }}
+              >
+                <div
+                  style={{
+                    width:
+                      `${refreshProgress.percent}%`,
+                    height: "100%",
+                    background:
+                      "currentColor",
+                    transition:
+                      "width 180ms ease",
+                  }}
+                />
+              </div>
+
+              <div
+                style={{
+                  marginTop: "4px",
+                  textAlign: "right",
+                  fontSize: "12px",
+                }}
+              >
+                {refreshProgress.percent} %
+              </div>
+            </div>
+          </PanelSectionRow>
+        )}
 
         {error && (
           <PanelSectionRow>
