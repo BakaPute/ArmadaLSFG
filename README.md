@@ -173,6 +173,57 @@ Après l'installation :
 
 ➡️ [Guide d'installation complet en français](docs/fr/INSTALLATION.md)
 
+## Mettre à jour Armada LSFG
+
+Il n'est pas nécessaire de désinstaller l'ancienne version.
+
+Depuis Konsole ou une connexion SSH sur l'appareil ArmadaOS :
+
+```bash
+curl -fL \
+  https://github.com/BakaPute/ArmadaLSFG/releases/latest/download/install.sh \
+  -o /tmp/armada-lsfg-install.sh
+
+chmod +x /tmp/armada-lsfg-install.sh
+
+/tmp/armada-lsfg-install.sh
+```
+
+L'installateur sauvegarde l'installation précédente, installe la dernière release publiée et conserve les configurations utilisateur.
+
+Après la mise à jour :
+
+```bash
+sudo reboot
+```
+
+➡️ [Guide complet de mise à jour et désinstallation](MAINTENANCE.md)
+
+## Désinstaller Armada LSFG
+
+Pour supprimer uniquement Armada LSFG :
+
+```bash
+sudo rm -rf ~/homebrew/plugins/ArmadaLSFG
+sudo reboot
+```
+
+Cette opération ne supprime pas LSFG-VK, Lossless Scaling ni `~/.config/lsfg-vk/`.
+
+Pour supprimer également les paramètres propres à Armada LSFG :
+
+```bash
+rm -rf ~/.config/armada-lsfg-manager
+```
+
+Pour supprimer également les sauvegardes Armada LSFG :
+
+```bash
+rm -rf ~/ArmadaLSFG-backups
+```
+
+➡️ [Guide complet de mise à jour et désinstallation](MAINTENANCE.md)
+
 ---
 
 ## 🇬🇧 Installation
@@ -288,6 +339,57 @@ After installation:
 5. verify that LSFG-VK and `Lossless.dll` are detected.
 
 ➡️ [Complete installation guide in English](docs/en/INSTALLATION.md)
+
+## Update Armada LSFG
+
+You do not need to uninstall the previous version first.
+
+From Konsole or an SSH session on the ArmadaOS device:
+
+```bash
+curl -fL \
+  https://github.com/BakaPute/ArmadaLSFG/releases/latest/download/install.sh \
+  -o /tmp/armada-lsfg-install.sh
+
+chmod +x /tmp/armada-lsfg-install.sh
+
+/tmp/armada-lsfg-install.sh
+```
+
+The installer backs up the previous installation, installs the latest published release and preserves user configuration.
+
+After updating:
+
+```bash
+sudo reboot
+```
+
+➡️ [Complete update and uninstall guide](MAINTENANCE.md)
+
+## Uninstall Armada LSFG
+
+To remove only Armada LSFG:
+
+```bash
+sudo rm -rf ~/homebrew/plugins/ArmadaLSFG
+sudo reboot
+```
+
+This does not remove LSFG-VK, Lossless Scaling or `~/.config/lsfg-vk/`.
+
+To also remove Armada LSFG settings:
+
+```bash
+rm -rf ~/.config/armada-lsfg-manager
+```
+
+To also remove Armada LSFG backups:
+
+```bash
+rm -rf ~/ArmadaLSFG-backups
+```
+
+➡️ [Complete update and uninstall guide](MAINTENANCE.md)
 
 ---
 
