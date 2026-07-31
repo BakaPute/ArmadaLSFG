@@ -384,6 +384,80 @@ class Plugin:
             / "steamapps"
         )
 
+    def _steamapps_paths(self):
+        import re
+
+        primary = self._steamapps_path()
+        steam_root = primary.parent
+
+        # Steam can keep libraryfolders.vdf in either location.
+        library_files = (
+            primary / "libraryfolders.vdf",
+            steam_root / "config" / "libraryfolders.vdf",
+        )
+
+        candidates = [primary]
+
+        for library_file in library_files:
+            try:
+                text = library_file.read_text(
+                    encoding="utf-8",
+                    errors="replace",
+                )
+            except Exception:
+                continue
+
+            for match in re.finditer(
+                r'^\s*"path"\s+"((?:\\\\.|[^"])*)"',
+                text,
+                re.MULTILINE,
+            ):
+                raw_path = match.group(1)
+
+                # Valve KeyValues may escape backslashes and quotes.
+                library_path = (
+                    raw_path
+                    .replace("\\\\", "\\")
+                    .replace('\\\"', '"')
+                )
+
+                root = Path(
+                    library_path
+                ).expanduser()
+
+                if not root.is_absolute():
+                    continue
+
+                candidates.append(
+                    root / "steamapps"
+                )
+
+        paths = []
+        seen = set()
+
+        for steamapps in candidates:
+            try:
+                key = str(
+                    steamapps.resolve(
+                        strict=False
+                    )
+                )
+            except Exception:
+                key = str(steamapps)
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+
+            # A removable library may currently be unmounted.
+            if not steamapps.is_dir():
+                continue
+
+            paths.append(steamapps)
+
+        return paths
+
     def _read_manifest(self, path: Path):
         import re
 
@@ -559,90 +633,95 @@ class Plugin:
         return executables
 
     def _installed_steam_games(self):
-        steamapps = self._steamapps_path()
-        common = steamapps / "common"
-
         settings = self._bootstrap_settings()
         managed_profiles = settings.get(
             "profiles",
             {},
         )
 
-        games = []
+        games_by_appid = {}
 
-        for manifest in sorted(
-            steamapps.glob(
-                "appmanifest_*.acf"
-            )
-        ):
-            data = self._read_manifest(
-                manifest
-            )
+        for steamapps in self._steamapps_paths():
+            common = steamapps / "common"
 
-            if not data:
-                continue
-
-            if self._ignore_steam_entry(
-                data["name"]
-            ):
-                continue
-
-            game_dir = (
-                common
-                / data["installdir"]
-            )
-
-            candidates = (
-                self._scan_executables(
-                    game_dir
+            for manifest in sorted(
+                steamapps.glob(
+                    "appmanifest_*.acf"
                 )
-            )
-
-            all_executables = (
-                self._scan_all_executables(
-                    game_dir
-                )
-            )
-
-            # Le jeu doit avoir au moins un .exe,
-            # même si aucun n'a passé le filtre
-            # automatique.
-            if not all_executables:
-                continue
-
-            appid = data["appid"]
-
-            managed = False
-
-            for key, profile in (
-                managed_profiles.items()
             ):
-                profile_appid = str(
-                    profile.get(
-                        "appid",
-                        "",
+                data = self._read_manifest(
+                    manifest
+                )
+
+                if not data:
+                    continue
+
+                if self._ignore_steam_entry(
+                    data["name"]
+                ):
+                    continue
+
+                game_dir = (
+                    common
+                    / data["installdir"]
+                )
+
+                candidates = (
+                    self._scan_executables(
+                        game_dir
                     )
                 )
 
-                if profile_appid == appid:
-                    managed = True
-                    break
+                all_executables = (
+                    self._scan_all_executables(
+                        game_dir
+                    )
+                )
 
-                if key in {
-                    exe.lower()
-                    for exe in candidates
-                }:
-                    managed = True
-                    break
+                # Le jeu doit avoir au moins un .exe,
+                # même si aucun n'a passé le filtre
+                # automatique.
+                if not all_executables:
+                    continue
 
-            recommended = (
-                candidates[0]
-                if len(candidates) == 1
-                else None
-            )
+                appid = data["appid"]
 
-            games.append(
-                {
+                # Steam peut temporairement laisser un manifest
+                # en double après un déplacement entre bibliothèques.
+                # On garde la première installation valide trouvée.
+                if appid in games_by_appid:
+                    continue
+
+                managed = False
+
+                for key, profile in (
+                    managed_profiles.items()
+                ):
+                    profile_appid = str(
+                        profile.get(
+                            "appid",
+                            "",
+                        )
+                    )
+
+                    if profile_appid == appid:
+                        managed = True
+                        break
+
+                    if key in {
+                        exe.lower()
+                        for exe in candidates
+                    }:
+                        managed = True
+                        break
+
+                recommended = (
+                    candidates[0]
+                    if len(candidates) == 1
+                    else None
+                )
+
+                games_by_appid[appid] = {
                     "appid": appid,
                     "name": data["name"],
                     "installdir": (
@@ -659,7 +738,10 @@ class Plugin:
                     ),
                     "managed": managed,
                 }
-            )
+
+        games = list(
+            games_by_appid.values()
+        )
 
         games.sort(
             key=lambda game:
