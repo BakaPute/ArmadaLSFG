@@ -24,6 +24,13 @@ import {
 } from "react-icons/fa";
 
 
+import {
+  t,
+  translateError,
+  translateRefreshMessage,
+} from "./i18n";
+
+
 type ManagedProfile = {
   key: string;
   appid: string | null;
@@ -343,8 +350,10 @@ function Content() {
     setRefreshProgress({
       active: true,
       percent: 0,
-      message:
+      message: t(
         "Démarrage de l'actualisation...",
+        "Starting refresh...",
+      ),
     });
 
     let progressTimer:
@@ -356,9 +365,13 @@ function Content() {
           () => {
             void getRefreshProgress()
               .then((progress) => {
-                setRefreshProgress(
-                  progress
-                );
+                setRefreshProgress({
+                  ...progress,
+                  message:
+                    translateRefreshMessage(
+                      progress.message
+                    ),
+                });
               })
               .catch(() => {
                 // Le rafraîchissement principal
@@ -382,8 +395,10 @@ function Content() {
       setRefreshProgress({
         active: false,
         percent: 100,
-        message:
+        message: t(
           "Actualisation terminée.",
+          "Refresh complete.",
+        ),
       });
 
     } catch (err) {
@@ -392,13 +407,15 @@ function Content() {
         err
       );
 
-      setError(String(err));
+      setError(translateError(String(err)));
 
       setRefreshProgress({
         active: false,
         percent: 0,
-        message:
+        message: t(
           "Échec de l'actualisation.",
+          "Refresh failed.",
+        ),
       });
 
     } finally {
@@ -451,7 +468,7 @@ function Content() {
         );
 
         setAutoRefresh(previous);
-        setError(String(err));
+        setError(translateError(String(err)));
       }
     };
 
@@ -480,7 +497,7 @@ function Content() {
           err
         );
 
-        setError(String(err));
+        setError(translateError(String(err)));
 
         await refresh();
 
@@ -512,8 +529,14 @@ function Content() {
         toaster.toast({
           title: profile.name,
           body: enabled
-            ? "LSFG activé"
-            : "LSFG désactivé",
+            ? t(
+                "LSFG activé",
+                "LSFG enabled",
+              )
+            : t(
+                "LSFG désactivé",
+                "LSFG disabled",
+              ),
         });
       }
     };
@@ -545,8 +568,10 @@ function Content() {
       if (ok) {
         toaster.toast({
           title: profile.name,
-          body:
+          body: t(
             `Multiplicateur réglé sur ×${multiplier}`,
+            `Multiplier set to ×${multiplier}`,
+          ),
         });
       }
     };
@@ -578,8 +603,10 @@ function Content() {
       if (ok) {
         toaster.toast({
           title: profile.name,
-          body:
+          body: t(
             `Flow Scale réglé sur ${flowScale}`,
+            `Flow Scale set to ${flowScale}`,
+          ),
         });
       }
     };
@@ -612,8 +639,14 @@ function Content() {
         toaster.toast({
           title: profile.name,
           body: enabled
-            ? "Performance Mode activé"
-            : "Performance Mode désactivé",
+            ? t(
+                "Performance Mode activé",
+                "Performance Mode enabled",
+              )
+            : t(
+                "Performance Mode désactivé",
+                "Performance Mode disabled",
+              ),
         });
       }
     };
@@ -662,8 +695,10 @@ function Content() {
 
         toaster.toast({
           title: profile.name,
-          body:
+          body: t(
             `Exécutable : ${displayedExecutable}`,
+            `Executable: ${displayedExecutable}`,
+          ),
         });
 
       } catch (err) {
@@ -672,7 +707,7 @@ function Content() {
           err
         );
 
-        setError(String(err));
+        setError(translateError(String(err)));
 
         await refresh();
 
@@ -704,8 +739,10 @@ function Content() {
 
         toaster.toast({
           title: profile.name,
-          body:
+          body: t(
             "Retiré du gestionnaire LSFG",
+            "Removed from LSFG manager",
+          ),
         });
 
       } catch (err) {
@@ -714,7 +751,7 @@ function Content() {
           err
         );
 
-        setError(String(err));
+        setError(translateError(String(err)));
 
         await refresh();
 
@@ -748,7 +785,10 @@ function Content() {
           || parsed.length !== 2
         ) {
           throw new Error(
-            "Format de sélection invalide."
+            t(
+              "Format de sélection invalide.",
+              "Invalid selection format.",
+            )
           );
         }
 
@@ -762,7 +802,10 @@ function Content() {
         );
 
         setError(
-          "Impossible de lire le jeu sélectionné."
+          t(
+            "Impossible de lire le jeu sélectionné.",
+            "Unable to read the selected game.",
+          )
         );
 
         return;
@@ -777,7 +820,10 @@ function Content() {
 
       if (!game) {
         setError(
-          "Jeu Steam introuvable."
+          t(
+            "Jeu Steam introuvable.",
+            "Steam game not found.",
+          )
         );
         return;
       }
@@ -797,8 +843,10 @@ function Content() {
 
         toaster.toast({
           title: game.name,
-          body:
+          body: t(
             `Ajouté à LSFG avec ${executable}`,
+            `Added to LSFG with ${executable}`,
+          ),
         });
 
         // Recharge la liste :
@@ -812,7 +860,7 @@ function Content() {
           err
         );
 
-        setError(String(err));
+        setError(translateError(String(err)));
 
       } finally {
         setAddingGame(false);
@@ -866,7 +914,7 @@ function Content() {
           );
 
           if (!cancelled) {
-            setError(String(err));
+            setError(translateError(String(err)));
           }
         }
       };
@@ -881,15 +929,29 @@ function Content() {
 
   return (
     <>
-      <PanelSection title="État LSFG">
+      <PanelSection
+        title={t(
+          "État LSFG",
+          "LSFG Status",
+        )}
+      >
 
         <PanelSectionRow>
           <StateLine
-            label="Couche Vulkan"
+            label={t(
+              "Couche Vulkan",
+              "Vulkan layer",
+            )}
             value={
               status?.layer_exists
-                ? "Détectée"
-                : "Absente"
+                ? t(
+                    "Détectée",
+                    "Detected",
+                  )
+                : t(
+                    "Absente",
+                    "Missing",
+                  )
             }
             ok={status?.layer_exists}
           />
@@ -900,8 +962,14 @@ function Content() {
             label="Lossless.dll"
             value={
               status?.dll_exists
-                ? "Détectée"
-                : "Absente"
+                ? t(
+                    "Détectée",
+                    "Detected",
+                  )
+                : t(
+                    "Absente",
+                    "Missing",
+                  )
             }
             ok={status?.dll_exists}
           />
@@ -912,8 +980,14 @@ function Content() {
             label="conf.toml"
             value={
               status?.config_exists
-                ? "Détecté"
-                : "Absent"
+                ? t(
+                    "Détecté",
+                    "Detected",
+                  )
+                : t(
+                    "Absent",
+                    "Missing",
+                  )
             }
             ok={status?.config_exists}
           />
@@ -935,19 +1009,34 @@ function Content() {
             onClick={refresh}
           >
             {loading
-              ? "Actualisation..."
-              : "Actualiser"}
+              ? t(
+                  "Actualisation...",
+                  "Refreshing...",
+                )
+              : t(
+                  "Actualiser",
+                  "Refresh",
+                )}
           </ButtonItem>
         </PanelSectionRow>
 
 
         <PanelSectionRow>
           <ToggleField
-            label="Actualisation automatique"
+            label={t(
+              "Actualisation automatique",
+              "Automatic refresh",
+            )}
             description={
               autoRefresh
-                ? "Actualiser à chaque ouverture"
-                : "Manuelle après la première détection"
+                ? t(
+                    "Actualiser à chaque ouverture",
+                    "Refresh every time the plugin opens",
+                  )
+                : t(
+                    "Manuelle après la première détection",
+                    "Manual after the first successful detection",
+                  )
             }
             checked={autoRefresh}
             disabled={loading}
@@ -1013,7 +1102,7 @@ function Content() {
         {error && (
           <PanelSectionRow>
             <div>
-              Erreur : {error}
+              {t("Erreur", "Error")} : {error}
             </div>
           </PanelSectionRow>
         )}
@@ -1021,7 +1110,10 @@ function Content() {
         {status?.config_parse_error && (
           <PanelSectionRow>
             <div>
-              Erreur TOML :{" "}
+              {t(
+                "Erreur TOML",
+                "TOML error",
+              )} :{" "}
               {status.config_parse_error}
             </div>
           </PanelSectionRow>
@@ -1030,13 +1122,21 @@ function Content() {
       </PanelSection>
 
 
-      <PanelSection title="Jeux LSFG">
+      <PanelSection
+        title={t(
+          "Jeux LSFG",
+          "LSFG Games",
+        )}
+      >
 
         {status?.managed_profiles.length
           === 0 && (
           <PanelSectionRow>
             <div>
-              Aucun jeu géré.
+              {t(
+                "Aucun jeu géré.",
+                "No managed games.",
+              )}
             </div>
           </PanelSectionRow>
         )}
@@ -1076,7 +1176,10 @@ function Content() {
                       ? profile.active_in.join(
                           ", "
                         )
-                      : "Exécutable inconnu"
+                      : t(
+                          "Exécutable inconnu",
+                          "Unknown executable",
+                        )
                   }
                   checked={profile.enabled}
                   disabled={
@@ -1154,7 +1257,10 @@ function Content() {
                             `custom:${item.path}`,
 
                           label:
-                            `Personnalisé — ${item.path}`,
+                            t(
+                              `Personnalisé — ${item.path}`,
+                              `Custom — ${item.path}`,
+                            ),
                         })
                       );
 
@@ -1183,11 +1289,20 @@ function Content() {
 
                   return (
                     <DropdownItem
-                      label="Exécutable"
+                      label={t(
+                        "Exécutable",
+                        "Executable",
+                      )}
                       description={
                         profile.executable_path
-                          ? "Exécutable personnalisé"
-                          : "Processus utilisé par LSFG"
+                          ? t(
+                              "Exécutable personnalisé",
+                              "Custom executable",
+                            )
+                          : t(
+                              "Processus utilisé par LSFG",
+                              "Process used by LSFG",
+                            )
                       }
                       rgOptions={
                         options
@@ -1215,11 +1330,20 @@ function Content() {
 
 
                 <DropdownItem
-                  label="Multiplicateur"
+                  label={t(
+                    "Multiplicateur",
+                    "Multiplier",
+                  )}
                   description={
                     profile.enabled
-                      ? "Frame Generation actif"
-                      : "Réglage mémorisé"
+                      ? t(
+                          "Frame Generation actif",
+                          "Frame Generation active",
+                        )
+                      : t(
+                          "Réglage mémorisé",
+                          "Saved setting",
+                        )
                   }
                   rgOptions={[
                     {
@@ -1257,8 +1381,14 @@ function Content() {
                   label="Flow Scale"
                   description={
                     profile.enabled
-                      ? "Échelle du calcul de flux"
-                      : "Réglage mémorisé"
+                      ? t(
+                          "Échelle du calcul de flux",
+                          "Optical flow calculation scale",
+                        )
+                      : t(
+                          "Réglage mémorisé",
+                          "Saved setting",
+                        )
                   }
                   rgOptions={[
                     {
@@ -1300,8 +1430,14 @@ function Content() {
                   label="Performance Mode"
                   description={
                     profile.enabled
-                      ? "Réglage appliqué au profil"
-                      : "Réglage mémorisé"
+                      ? t(
+                          "Réglage appliqué au profil",
+                          "Setting applied to the profile",
+                        )
+                      : t(
+                          "Réglage mémorisé",
+                          "Saved setting",
+                        )
                   }
                   checked={
                     profile.performance_mode
@@ -1341,8 +1477,14 @@ function Content() {
                 >
                   {removeConfirmKey
                     === profile.key
-                    ? "Confirmer la suppression"
-                    : "Retirer du gestionnaire"}
+                    ? t(
+                        "Confirmer la suppression",
+                        "Confirm removal",
+                      )
+                    : t(
+                        "Retirer du gestionnaire",
+                        "Remove from manager",
+                      )}
                 </ButtonItem>
 
               </div>
@@ -1355,12 +1497,20 @@ function Content() {
       </PanelSection>
 
 
-      <PanelSection title="Ajouter un jeu">
+      <PanelSection
+        title={t(
+          "Ajouter un jeu",
+          "Add a Game",
+        )}
+      >
 
         {addGameOptions.length === 0 ? (
           <PanelSectionRow>
             <div>
-              Aucun autre jeu Windows détecté.
+              {t(
+                "Aucun autre jeu Windows détecté.",
+                "No other Windows games detected.",
+              )}
             </div>
           </PanelSectionRow>
         ) : (
@@ -1369,11 +1519,20 @@ function Content() {
             <DropdownItem
               label={
                 addingGame
-                  ? "Ajout en cours..."
-                  : "Jeu Steam"
+                  ? t(
+                      "Ajout en cours...",
+                      "Adding...",
+                    )
+                  : t(
+                      "Jeu Steam",
+                      "Steam Game",
+                    )
               }
               description={
-                "Sélectionner un jeu l'ajoute directement à LSFG"
+                t(
+                  "Sélectionner un jeu l'ajoute directement à LSFG",
+                  "Selecting a game adds it directly to LSFG",
+                )
               }
               rgOptions={
                 addGameOptions
