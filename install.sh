@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 REPO_OWNER="BakaPute"
 REPO_NAME="ArmadaLSFG"
-VERSION="${ARMADA_LSFG_VERSION:-v0.1.1}"
+VERSION="${ARMADA_LSFG_VERSION:-v0.1.2}"
 
 PLUGIN_NAME="ArmadaLSFG"
 PLUGIN_PARENT="${HOME}/homebrew/plugins"
@@ -69,8 +69,8 @@ Armada LSFG installer
 
 Usage:
   ./install.sh
-  ./install.sh --version v0.1.1
-  ./install.sh --local /path/to/ArmadaLSFG-v0.1.1.zip
+  ./install.sh --version v0.1.2
+  ./install.sh --local /path/to/ArmadaLSFG-v0.1.2.zip
 
 Options:
   --version VERSION   Install a specific GitHub release tag.

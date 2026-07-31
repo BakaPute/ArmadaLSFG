@@ -28,6 +28,7 @@ La documentation publique est toutefois maintenue autant que possible en frança
 
 - [Documentation complète en français](docs/fr/README.md)
 - [Guide d'installation complet](docs/fr/INSTALLATION.md)
+- [Mise à jour et désinstallation](MAINTENANCE.md)
 - [Déclaration sur le développement assisté par IA](docs/fr/AI_DISCLOSURE.md)
 - [Crédits, dépendances et projets tiers](docs/fr/THIRD_PARTY_NOTICES.md)
 
@@ -45,6 +46,7 @@ Public documentation is nevertheless maintained in both French and English whene
 
 - [Full English documentation](docs/en/README.md)
 - [Complete installation guide](docs/en/INSTALLATION.md)
+- [Update and uninstall](MAINTENANCE.md)
 - [AI development disclosure](docs/en/AI_DISCLOSURE.md)
 - [Credits, dependencies and third-party projects](docs/en/THIRD_PARTY_NOTICES.md)
 
@@ -330,4 +332,4 @@ All product names, trademarks and project names belong to their respective owner
 
 ## Version
 
-**v0.1.1**
+**v0.1.2**
