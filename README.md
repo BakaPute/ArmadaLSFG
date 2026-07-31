@@ -434,4 +434,4 @@ All product names, trademarks and project names belong to their respective owner
 
 ## Version
 
-**v0.1.2**
+**v0.1.3**
