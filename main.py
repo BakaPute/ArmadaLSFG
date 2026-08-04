@@ -951,6 +951,340 @@ class Plugin:
             self._known_steam_games
         )
 
+
+    # ---------------------------------------------------------
+    # Profils LSFG actuellement utilisés
+    # ---------------------------------------------------------
+
+    def _process_basename(self, value):
+        normalized = (
+            str(value)
+            .strip()
+            .strip("\"'")
+            .replace("\\", "/")
+        )
+
+        if not normalized:
+            return ""
+
+        return (
+            normalized
+            .rsplit("/", 1)[-1]
+            .strip()
+            .lower()
+        )
+
+    def _enabled_profile_keys(self):
+        text = self._read_config_text()
+        _, blocks = self._split_config(
+            text
+        )
+
+        result = set()
+
+        for block in blocks:
+            profile = (
+                self._parse_profile_block(
+                    block
+                )
+            )
+
+            if not profile:
+                continue
+
+            result.add(
+                self._profile_key(profile)
+            )
+
+        return result
+
+    def _running_process_snapshot(
+        self,
+        target_names,
+        target_appids,
+    ):
+        matched_names = set()
+        matched_appids = set()
+        proc = Path("/proc")
+
+        try:
+            process_dirs = list(
+                proc.iterdir()
+            )
+        except OSError:
+            return (
+                matched_names,
+                matched_appids,
+            )
+
+        for process_dir in process_dirs:
+            if not process_dir.name.isdigit():
+                continue
+
+            candidates = []
+
+            try:
+                candidates.append(
+                    os.readlink(
+                        process_dir / "exe"
+                    )
+                )
+            except OSError:
+                pass
+
+            try:
+                candidates.append(
+                    process_dir
+                    .joinpath("comm")
+                    .read_text(
+                        encoding="utf-8",
+                        errors="ignore",
+                    )
+                    .strip()
+                )
+            except OSError:
+                pass
+
+            try:
+                cmdline = (
+                    process_dir
+                    .joinpath("cmdline")
+                    .read_bytes()
+                )
+            except OSError:
+                cmdline = b""
+
+            for raw_argument in (
+                cmdline.split(b"\0")
+            ):
+                if not raw_argument:
+                    continue
+
+                candidates.append(
+                    raw_argument.decode(
+                        "utf-8",
+                        errors="ignore",
+                    )
+                )
+
+            for candidate in candidates:
+                name = self._process_basename(
+                    candidate
+                )
+
+                if name in target_names:
+                    matched_names.add(name)
+
+            if target_appids:
+                try:
+                    environment = (
+                        process_dir
+                        .joinpath("environ")
+                        .read_bytes()
+                    )
+                except OSError:
+                    environment = b""
+
+                for entry in (
+                    environment.split(b"\0")
+                ):
+                    if b"=" not in entry:
+                        continue
+
+                    key, value = entry.split(
+                        b"=",
+                        1,
+                    )
+
+                    if key not in (
+                        b"SteamAppId",
+                        b"SteamGameId",
+                        b"SteamOverlayGameId",
+                    ):
+                        continue
+
+                    appid = value.decode(
+                        "utf-8",
+                        errors="ignore",
+                    ).strip()
+
+                    if appid in target_appids:
+                        matched_appids.add(
+                            appid
+                        )
+
+            if (
+                matched_names == target_names
+                and matched_appids
+                == target_appids
+            ):
+                break
+
+        return (
+            matched_names,
+            matched_appids,
+        )
+
+    def _active_profile_keys(self):
+        settings = (
+            self._bootstrap_settings()
+        )
+
+        profiles = settings.get(
+            "profiles",
+            {},
+        )
+
+        if not isinstance(
+            profiles,
+            dict,
+        ):
+            return []
+
+        enabled_keys = (
+            self._enabled_profile_keys()
+        )
+
+        if not enabled_keys:
+            return []
+
+        profile_names = {}
+        profile_appids = {}
+        target_names = set()
+        target_appids = set()
+
+        for key, profile in (
+            profiles.items()
+        ):
+            normalized_key = (
+                str(key)
+                .strip()
+                .lower()
+            )
+
+            if (
+                normalized_key
+                not in enabled_keys
+                or not isinstance(
+                    profile,
+                    dict,
+                )
+            ):
+                continue
+
+            names = set()
+
+            key_name = (
+                self._process_basename(
+                    normalized_key
+                )
+            )
+
+            if key_name:
+                names.add(key_name)
+
+            active_in = profile.get(
+                "active_in",
+                [],
+            )
+
+            if not isinstance(
+                active_in,
+                list,
+            ):
+                active_in = []
+
+            for executable in active_in:
+                executable_name = (
+                    self._process_basename(
+                        executable
+                    )
+                )
+
+                if executable_name:
+                    names.add(
+                        executable_name
+                    )
+
+            executable_path = (
+                profile.get(
+                    "executable_path"
+                )
+            )
+
+            if executable_path:
+                executable_name = (
+                    self._process_basename(
+                        executable_path
+                    )
+                )
+
+                if executable_name:
+                    names.add(
+                        executable_name
+                    )
+
+            appid = profile.get("appid")
+            normalized_appid = (
+                str(appid).strip()
+                if appid is not None
+                else ""
+            )
+
+            profile_names[
+                normalized_key
+            ] = names
+
+            profile_appids[
+                normalized_key
+            ] = normalized_appid
+
+            target_names.update(names)
+
+            if normalized_appid:
+                target_appids.add(
+                    normalized_appid
+                )
+
+        if (
+            not target_names
+            and not target_appids
+        ):
+            return []
+
+        (
+            running_names,
+            running_appids,
+        ) = self._running_process_snapshot(
+            target_names,
+            target_appids,
+        )
+
+        result = []
+
+        for key in profile_names:
+            names = profile_names[key]
+            appid = profile_appids[key]
+
+            if (
+                names & running_names
+                or (
+                    appid
+                    and appid
+                    in running_appids
+                )
+            ):
+                result.append(key)
+
+        return result
+
+    async def get_active_profile_keys(
+        self
+    ):
+        return await asyncio.to_thread(
+            self._active_profile_keys
+        )
+
     def _set_refresh_progress(
         self,
         percent,

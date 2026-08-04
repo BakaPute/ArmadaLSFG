@@ -121,6 +121,12 @@ const getRefreshProgress =
   );
 
 
+const getActiveProfileKeys =
+  callable<[], string[]>(
+    "get_active_profile_keys",
+  );
+
+
 const setAutoRefreshPreference =
   callable<[enabled: boolean], boolean>(
     "set_auto_refresh",
@@ -243,6 +249,41 @@ function StateLine({
 }
 
 
+const selectedProfileStorageKey =
+  "armada-lsfg:selected-profile";
+
+
+const loadSelectedProfileKey =
+  (): string | null => {
+    try {
+      return window.sessionStorage.getItem(
+        selectedProfileStorageKey
+      );
+    } catch {
+      return null;
+    }
+  };
+
+
+const storeSelectedProfileKey =
+  (key: string | null) => {
+    try {
+      if (key) {
+        window.sessionStorage.setItem(
+          selectedProfileStorageKey,
+          key,
+        );
+      } else {
+        window.sessionStorage.removeItem(
+          selectedProfileStorageKey
+        );
+      }
+    } catch {
+      // Le stockage de session est optionnel.
+    }
+  };
+
+
 function Content() {
   const [
     status,
@@ -304,6 +345,103 @@ function Content() {
     null
   );
 
+
+  const [
+    selectedProfileKey,
+    setSelectedProfileKey,
+  ] = useState<string | null>(
+    () => loadSelectedProfileKey()
+  );
+
+
+  const updateSelectedProfileKey =
+    (key: string | null) => {
+      storeSelectedProfileKey(key);
+      setSelectedProfileKey(key);
+    };
+
+
+  const [
+    profilePickerOpen,
+    setProfilePickerOpen,
+  ] = useState(false);
+
+
+  const [
+    activeProfileKeys,
+    setActiveProfileKeys,
+  ] = useState<string[]>([]);
+
+
+  const managedProfiles =
+    useMemo(
+      () =>
+        status?.managed_profiles
+        ?? [],
+      [status],
+    );
+
+
+  const activeProfileKeySet =
+    useMemo(
+      () => new Set(
+        activeProfileKeys
+      ),
+      [activeProfileKeys],
+    );
+
+
+  const visibleProfiles =
+    useMemo(
+      () => {
+        const result:
+          ManagedProfile[] = [];
+
+        const selected =
+          selectedProfileKey
+            ? managedProfiles.find(
+                (profile) =>
+                  profile.key
+                  === selectedProfileKey
+              )
+            : undefined;
+
+        // Le jeu choisi manuellement
+        // est toujours affiché en premier.
+        if (selected) {
+          result.push(selected);
+        }
+
+        // Les jeux actifs sont affichés
+        // ensuite, sans doublon.
+        for (
+          const profile
+          of managedProfiles
+        ) {
+          if (
+            profile.key
+            === selectedProfileKey
+          ) {
+            continue;
+          }
+
+          if (
+            activeProfileKeySet.has(
+              profile.key
+            )
+          ) {
+            result.push(profile);
+          }
+        }
+
+        return result;
+      },
+      [
+        managedProfiles,
+        activeProfileKeySet,
+        selectedProfileKey,
+      ],
+    );
 
 
   const availableGames =
@@ -526,6 +664,17 @@ function Content() {
         );
 
       if (ok) {
+        if (
+          !enabled
+          && activeProfileKeySet.has(
+            profile.key
+          )
+        ) {
+          updateSelectedProfileKey(
+            profile.key
+          );
+        }
+
         toaster.toast({
           title: profile.name,
           body: enabled
@@ -679,6 +828,31 @@ function Content() {
 
         setStatus(result);
 
+        if (
+          selectedProfileKey
+          === profile.key
+          || activeProfileKeySet.has(
+            profile.key
+          )
+        ) {
+          const replacement =
+            result.managed_profiles.find(
+              (candidate) =>
+                (
+                  profile.appid
+                  && candidate.appid
+                  === profile.appid
+                )
+                || candidate.name
+                  === profile.name
+            );
+
+          updateSelectedProfileKey(
+            replacement?.key
+            ?? null
+          );
+        }
+
         await refreshSteamGames();
 
         const displayedExecutable =
@@ -732,6 +906,21 @@ function Content() {
           );
 
         setStatus(result);
+
+        if (
+          selectedProfileKey
+          === profile.key
+        ) {
+          updateSelectedProfileKey(null);
+        }
+
+        setActiveProfileKeys(
+          (keys) =>
+            keys.filter(
+              (key) =>
+                key !== profile.key
+            )
+        );
 
         setRemoveConfirmKey(null);
 
@@ -841,6 +1030,18 @@ function Content() {
 
         setStatus(result);
 
+        const addedProfile =
+          result.managed_profiles.find(
+            (profile) =>
+              profile.appid === appid
+          );
+
+        if (addedProfile) {
+          updateSelectedProfileKey(
+            addedProfile.key
+          );
+        }
+
         toaster.toast({
           title: game.name,
           body: t(
@@ -866,6 +1067,66 @@ function Content() {
         setAddingGame(false);
       }
     };
+
+
+  useEffect(() => {
+    // Ne pas effacer la sélection pendant
+    // un chargement ou un remontage Decky.
+    if (
+      status !== null
+      && !loading
+      && selectedProfileKey
+      && !managedProfiles.some(
+        (profile) =>
+          profile.key
+          === selectedProfileKey
+      )
+    ) {
+      updateSelectedProfileKey(null);
+    }
+  }, [
+    status,
+    loading,
+    managedProfiles,
+    selectedProfileKey,
+  ]);
+
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const updateActiveProfiles =
+      async () => {
+        try {
+          const keys =
+            await getActiveProfileKeys();
+
+          if (!cancelled) {
+            setActiveProfileKeys(keys);
+          }
+        } catch (err) {
+          console.error(
+            "Active LSFG profile detection failed:",
+            err
+          );
+        }
+      };
+
+    void updateActiveProfiles();
+
+    const timer =
+      window.setInterval(
+        () => {
+          void updateActiveProfiles();
+        },
+        2000,
+      );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -1129,7 +1390,98 @@ function Content() {
         )}
       >
 
-        {status?.managed_profiles.length
+        {managedProfiles.length > 0 && (
+          <>
+            <PanelSectionRow>
+              <ButtonItem
+                layout="below"
+                onClick={() =>
+                  setProfilePickerOpen(
+                    (open) => !open
+                  )
+                }
+              >
+                {selectedProfileKey
+                  ? (
+                      managedProfiles.find(
+                        (profile) =>
+                          profile.key
+                          === selectedProfileKey
+                      )?.name
+                      ?? t(
+                        "Choisir un jeu avec profil",
+                        "Choose a game with a profile",
+                      )
+                    )
+                  : t(
+                      "Choisir un jeu avec profil",
+                      "Choose a game with a profile",
+                    )
+                }
+                {profilePickerOpen
+                  ? " ▲"
+                  : " ▼"
+                }
+              </ButtonItem>
+            </PanelSectionRow>
+
+
+            {profilePickerOpen
+              && managedProfiles.map(
+                (profile) => (
+                  <PanelSectionRow
+                    key={
+                      `profile-choice:${profile.key}`
+                    }
+                  >
+                    <ButtonItem
+                      layout="below"
+                      onClick={() => {
+                        updateSelectedProfileKey(
+                          profile.key
+                        );
+                        setProfilePickerOpen(
+                          false
+                        );
+                        setRemoveConfirmKey(
+                          null
+                        );
+                        setError(null);
+                      }}
+                    >
+                      {profile.key
+                        === selectedProfileKey
+                          ? `✓ ${profile.name}`
+                          : profile.name
+                      }
+                    </ButtonItem>
+                  </PanelSectionRow>
+                )
+              )
+            }
+          </>
+        )}
+
+
+        {selectedProfileKey && (
+          <PanelSectionRow>
+            <ButtonItem
+              layout="below"
+              onClick={() => {
+                updateSelectedProfileKey(null);
+                setRemoveConfirmKey(null);
+              }}
+            >
+              {t(
+                "Masquer le jeu sélectionné",
+                "Hide selected game",
+              )}
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
+
+
+        {managedProfiles.length
           === 0 && (
           <PanelSectionRow>
             <div>
@@ -1142,7 +1494,21 @@ function Content() {
         )}
 
 
-        {status?.managed_profiles.map(
+        {managedProfiles.length > 0
+          && visibleProfiles.length === 0
+          && (
+          <PanelSectionRow>
+            <div>
+              {t(
+                "Sélectionne un jeu avec profil. Le jeu en cours apparaîtra automatiquement.",
+                "Select a game with a profile. The running game will appear automatically.",
+              )}
+            </div>
+          </PanelSectionRow>
+        )}
+
+
+        {visibleProfiles.map(
           (profile) => (
 
             <PanelSectionRow
@@ -1166,6 +1532,37 @@ function Content() {
                   }}
                 >
                   {profile.name}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "12px",
+                    opacity: 0.75,
+                    marginBottom: "8px",
+                  }}
+                >
+                  {activeProfileKeySet.has(
+                    profile.key
+                  )
+                    ? t(
+                        "Jeu en cours",
+                        "Running game",
+                      )
+                    : t(
+                        "Jeu sélectionné",
+                        "Selected game",
+                      )}
+
+                  {activeProfileKeySet.has(
+                    profile.key
+                  )
+                  && selectedProfileKey
+                    === profile.key
+                    ? ` • ${t(
+                        "Sélectionné",
+                        "Selected",
+                      )}`
+                    : ""}
                 </div>
 
                 <ToggleField
